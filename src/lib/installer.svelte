@@ -231,31 +231,69 @@
 
 {#if canAdvance}
     <strong>Installed!</strong>
+
+    <p>
+        You're all set. You can now close this window and open the game. After
+        logging in to a character, Heliosphere will prompt you to do a
+        first-time setup.
+    </p>
 {:else}
     {#if error != null}
         {error}
     {/if}
 
     {#if showPrompt[0] !== false}
-        <label>
-            Where would you like mods to be stored?
-            <button
-                onclick={choosePenumbraDir}
-            >
-                Pick folder
-            </button>
-        </label>
+        <strong>
+            Where would you like your mods to be stored?
+        </strong>
+
+        <p>
+            Pick a short location close to the root of a drive like
+            <code>C:\Penumbra</code> or <code>C:\FFXIVMods</code>.
+        </p>
+
+        <button
+            onclick={choosePenumbraDir}
+        >
+            Pick folder
+        </button>
 
         {#if typeof showPrompt[0] === 'string'}
-            <small>
-                {showPrompt[0]}
-            </small>
+            <div class='error'>
+                <small>
+                    {showPrompt[0]}
+                </small>
+            </div>
         {/if}
     {/if}
 
-    <ul>
-        {#each [...statuses].reverse() as status}
-            <li>{status}</li>
-        {/each}
-    </ul>
+    {#if statuses.length > 0}
+        <div
+            class='statuses'
+            class:muted={error != null || showPrompt[0] !== false}
+        >
+            <strong>{ statuses[0] }</strong>
+            <ul>
+                {#each [...statuses.slice(1)].reverse() as status}
+                    <li>{status}</li>
+                {/each}
+            </ul>
+        </div>
+    {/if}
 {/if}
+
+<style lang='scss'>
+    @use 'sass:color';
+    @use '@picocss/pico/scss/colors' as *;
+
+    .statuses.muted {
+        opacity: .5;
+    }
+
+    .error {
+        padding: var(--pico-spacing);
+        border-radius: var(--pico-border-radius);
+        background-color: #{color.mix($slate-900, $red-500, 95%)};
+        color: #{color.mix($zinc-200, $red-500, 90%)};
+    }
+</style>
