@@ -88,8 +88,8 @@
         const heliospherePlugin = repo.find(plugin => plugin['InternalName'] === HeliosphereInternalName);
         const penumbraPlugin = repo.find(plugin => plugin['InternalName'] === PenumbraInternalName);
 
-        await installPlugin(penumbraPlugin, config, already || SeaOfStarsRepo);
-        await installPlugin(heliospherePlugin, config, already || SeaOfStarsRepo);
+        configModified = configModified || await installPlugin(penumbraPlugin, config, already || SeaOfStarsRepo);
+        configModified = configModified || await installPlugin(heliospherePlugin, config, already || SeaOfStarsRepo);
 
         if (configModified) {
             statuses.push('saving Dalamud configuration file');
@@ -222,7 +222,7 @@
 
         await invoke('write_plugin_config_json', {
             internalName: PenumbraInternalName,
-            json: JSON.stringify(config),
+            json: JSON.stringify(config, undefined, 4),
         });
 
         canAdvance = true;
@@ -272,9 +272,9 @@
             class='statuses'
             class:muted={error != null || showPrompt[0] !== false}
         >
-            <strong>{ statuses[0] }</strong>
+            <strong>{ statuses[statuses.length - 1] }</strong>
             <ul>
-                {#each [...statuses.slice(1)].reverse() as status}
+                {#each [...statuses].reverse().slice(1) as status}
                     <li>{status}</li>
                 {/each}
             </ul>

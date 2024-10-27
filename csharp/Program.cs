@@ -39,11 +39,22 @@ public class Installer {
     public static unsafe void SetCopyToCStringFunctionPtr(delegate*<char*, int, byte*> copyToCString) => CopyToCString = copyToCString;
 
     [UnmanagedCallersOnly]
-    public static unsafe void Initialise(byte* dalamudPathRaw, int dalamudPathLen) {
+    public static unsafe void Initialise(
+        byte* dalamudPathRaw,
+        int dalamudPathLen,
+        byte* dalamudCommonPathRaw,
+        int dalamudCommonPathLen,
+        byte* newtonsoftPathRaw,
+        int newtonsoftPathLen
+    ) {
         var dalamudPath = Marshal.PtrToStringUTF8((nint) dalamudPathRaw, dalamudPathLen);
+        var dalamudCommonPath = Marshal.PtrToStringUTF8((nint) dalamudCommonPathRaw, dalamudCommonPathLen);
+        var newtonsoftPath = Marshal.PtrToStringUTF8((nint) newtonsoftPathRaw, newtonsoftPathLen);
 
-        var assembly = Assembly.LoadFrom(dalamudPath);
-        Installer.Instance = new Installer(assembly);
+        var newtonsoft = Assembly.LoadFrom(newtonsoftPath);
+        Assembly.LoadFrom(dalamudCommonPath);
+        var dalamud = Assembly.LoadFrom(dalamudPath);
+        Installer.Instance = new Installer(dalamud, newtonsoft);
     }
 
     [UnmanagedCallersOnly]

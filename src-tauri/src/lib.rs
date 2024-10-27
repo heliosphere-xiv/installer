@@ -322,31 +322,57 @@ async fn initialise(
         None => return Ok(false),
     };
 
-    let assembly_path = xl_path
+    let dev_path = xl_path
         .join("addon")
         .join("Hooks")
-        .join("dev")
-        .join("Dalamud.dll");
+        .join("dev");
+    let dalamud_path = dev_path.join("Dalamud.dll");
+    let dalamud_common_path = dev_path.join("Dalamud.Common.dll");
+    let newtonsoft_path = dev_path.join("Newtonsoft.Json.dll");
 
-    if !assembly_path.exists() {
+    if !dalamud_path.exists() || !dalamud_common_path.exists() || !newtonsoft_path.exists() {
         return Ok(false);
     }
 
     let loader = state.delegate_loader.lock().await;
     set_cstr_stuff(&*loader);
     let initialise = loader
-        .get_function_with_unmanaged_callers_only::<fn(*const u8, i32)>(
+        .get_function_with_unmanaged_callers_only::<fn(
+            *const u8,
+            i32,
+            *const u8,
+            i32,
+            *const u8,
+            i32,
+        )>(
             pdcstr!("HeliosphereInstaller.Installer, heliosphere-installer"),
             pdcstr!("Initialise"),
         )
         .unwrap();
 
-    let assembly_path_str = match assembly_path.to_str() {
+    let dalamud_path_str = match dalamud_path.to_str() {
         Some(p) => p,
         None => return Ok(false),
     };
 
-    initialise(assembly_path_str.as_ptr(), assembly_path_str.len() as i32);
+    let dalamud_common_path_str = match dalamud_common_path.to_str() {
+        Some(p) => p,
+        None => return Ok(false),
+    };
+
+    let newtonsoft_path_str = match newtonsoft_path.to_str() {
+        Some(p) => p,
+        None => return Ok(false),
+    };
+
+    initialise(
+        dalamud_path_str.as_ptr(),
+        dalamud_path_str.len() as i32,
+        dalamud_common_path_str.as_ptr(),
+        dalamud_common_path_str.len() as i32,
+        newtonsoft_path_str.as_ptr(),
+        newtonsoft_path_str.len() as i32,
+    );
 
     Ok(true)
 }
