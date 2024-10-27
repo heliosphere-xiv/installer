@@ -1,6 +1,5 @@
 using System.Reflection;
 using System.Runtime.InteropServices;
-using Newtonsoft.Json;
 
 namespace HeliosphereInstaller;
 
@@ -10,6 +9,7 @@ public class Installer {
     const string PenumbraInternalName = "Penumbra";
     const string HeliosphereInternalName = "heliosphere-plugin";
 
+    private Serde Serde { get; }
     private HttpClient Client { get; }
     private string DalamudFolder { get; }
 
@@ -57,7 +57,7 @@ public class Installer {
         self.ThirdRepoSettingsProps["Url"].SetValue(repo, url);
         self.ThirdRepoSettingsProps["IsEnabled"].SetValue(repo, true);
 
-        var json = JsonConvert.SerializeObject(repo, self.ThirdRepoSettingsType, Installer.ConfigJsonSettings);
+        var json = self.Serde.Serialise(repo, self.ThirdRepoSettingsType, self.Serde.ConfigJsonSettings);
         fixed (char* ptr = json) {
             return CopyToCString(ptr, json.Length);
         }
@@ -81,7 +81,7 @@ public class Installer {
         self.ProfilePluginProps["WorkingPluginId"].SetValue(plugin, workingId);
         self.ProfilePluginProps["IsEnabled"].SetValue(plugin, true);
 
-        var json = JsonConvert.SerializeObject(plugin, self.ProfilePluginType, Installer.ConfigJsonSettings);
+        var json = self.Serde.Serialise(plugin, self.ProfilePluginType, self.Serde.ConfigJsonSettings);
         fixed (char* ptr = json) {
             return CopyToCString(ptr, json.Length);
         }
@@ -106,11 +106,11 @@ public class Installer {
 
         var workingId = Guid.Parse(workingIdStr);
 
-        var manifest = JsonConvert.DeserializeObject(manifestJson, self.LocalManifestType);
+        var manifest = self.Serde.Deserialise(manifestJson, self.LocalManifestType);
         self.LocalManifestProps["WorkingPluginId"].SetValue(manifest, workingId);
         self.LocalManifestProps["InstalledFromUrl"].SetValue(manifest, repoUrl);
 
-        var json = JsonConvert.SerializeObject(manifest, self.LocalManifestType, new JsonSerializerSettings());
+        var json = self.Serde.Serialise(manifest, self.LocalManifestType, 1);
         fixed (char* ptr = json) {
             *outManifestJson = CopyToCString(ptr, json.Length);
         }
@@ -166,18 +166,13 @@ public class Installer {
         return 1;
     }
 
-    internal readonly static JsonSerializerSettings ConfigJsonSettings = new() {
-        TypeNameHandling = TypeNameHandling.All,
-        TypeNameAssemblyFormatHandling = TypeNameAssemblyFormatHandling.Simple,
-        Formatting = Formatting.Indented,
-    };
-
-    private Installer(Assembly assembly) {
+    private Installer(Assembly dalamud, Assembly newtonsoft) {
+        this.Serde = new Serde(newtonsoft);
         this.Client = new HttpClient();
         this.DalamudFolder = Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "XIVLauncher");
 
         var (localManifestType, localManifestProps) = GetTypeAndProperties(
-            assembly,
+            dalamud,
             "Dalamud.Plugin.Internal.Types.Manifest.LocalPluginManifest",
             [
                 "WorkingPluginId",
@@ -189,7 +184,7 @@ public class Installer {
         this.LocalManifestProps = localManifestProps;
 
         var (configurationType, configurationProps) = GetTypeAndProperties(
-            assembly,
+            dalamud,
             "Dalamud.Configuration.Internal.DalamudConfiguration",
             [
                 "ThirdRepoList",
@@ -201,7 +196,7 @@ public class Installer {
         this.ConfigurationProps = configurationProps;
 
         var (profileModelType, profileModelProps) = GetTypeAndProperties(
-            assembly,
+            dalamud,
             "Dalamud.Plugin.Internal.Profiles.ProfileModelV1",
             [
                 "Plugins",
@@ -245,7 +240,7 @@ public class Installer {
             "Name",
         };
         var (thirdRepoSettingsType, thirdRepoSettingsProps) = GetTypeAndProperties(
-            assembly,
+            dalamud,
             "Dalamud.Configuration.ThirdPartyRepoSettings",
             [.. thirdRepoSettingsPropsWanted]
         );
@@ -303,4 +298,87 @@ public class MiniPenumbraConfig {
 public class RepoPlugin {
     public string InternalName { get; set; } = "";
     public string DownloadLinkInstall { get; set; } = "";
+}
+
+public class Serde {
+    private Type SettingsType { get; }
+    private Type FormattingType { get; }
+    private MethodInfo SerialiseMethod { get; }
+    private MethodInfo DeserialiseMethod { get; }
+    public object ConfigJsonSettings { get; }
+
+    public Serde(Assembly assembly) {
+        var convert = assembly.GetType("Newtonsoft.Json.JsonConvert");
+        var settings = assembly.GetType("Newtonsoft.Json.JsonSerializerSettings");
+        var formatting = assembly.GetType("Newtonsoft.Json.Formatting");
+        if (convert == null || settings == null || formatting == null) {
+            throw new Exception("missing JsonConvert, JsonSerializerSettings, or Formatting");
+        }
+
+        var serialiseParams = new Type[] {
+            typeof(object),
+            typeof(Type),
+            settings,
+        };
+        var serialiseMethod = convert
+            .GetMethods(BindingFlags.Static | BindingFlags.Public)
+            .First(
+                method =>
+                    method.Name == "SerializeObject"
+                    && method.GetParameters().Select(param => param.ParameterType).SequenceEqual(serialiseParams)
+            );
+
+        var deserialiseParams = new Type[] {
+            typeof(string),
+            settings,
+        };
+        var deserialiseMethod = convert
+            .GetMethods(BindingFlags.Static | BindingFlags.Public)
+            .First(
+                method =>
+                    method.Name == "DeserializeObject"
+                    && method.IsGenericMethod
+                    && method.GetParameters().Select(param => param.ParameterType).SequenceEqual(deserialiseParams)
+            );
+
+        var configSettings = Activator.CreateInstance(settings)!;
+        settings.GetProperty("TypeNameHandling")!.SetValue(configSettings, 1 | 2);
+        settings.GetProperty("TypeNameAssemblyFormatHandling")!.SetValue(configSettings, 0);
+        settings.GetProperty("Formatting")!.SetValue(configSettings, 1);
+
+        this.SettingsType = settings;
+        this.FormattingType = formatting;
+        this.SerialiseMethod = serialiseMethod;
+        this.DeserialiseMethod = deserialiseMethod;
+        this.ConfigJsonSettings = configSettings;
+    }
+
+    public string Serialise(object? obj, Type type, int formatting, object? settings = null) {
+        settings ??= Activator.CreateInstance(this.SettingsType);
+        this.SettingsType.GetProperty("Formatting")!.SetValue(settings, formatting);
+
+        return this.Serialise(obj, type, settings);
+    }
+
+    public string Serialise(object? obj, Type type, object? settings = null) {
+        settings ??= Activator.CreateInstance(this.SettingsType);
+        var json = this.SerialiseMethod.Invoke(null, [
+            obj,
+            type,
+            settings,
+        ]) as string;
+
+        return json!;
+    }
+
+    public object? Deserialise(string json, Type type, object? settings = null) {
+        settings ??= Activator.CreateInstance(this.SettingsType);
+
+        return this.DeserialiseMethod
+            .MakeGenericMethod(type)
+            .Invoke(null, [
+                json,
+                settings
+            ]);
+    }
 }
