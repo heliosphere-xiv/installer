@@ -1,6 +1,7 @@
 <script lang="ts">
+    import Installer from '$lib/installer.svelte';
     import Prerequisites from '$lib/prerequisites.svelte';
-import Splash from '$lib/splash.svelte';
+    import Splash from '$lib/splash.svelte';
 
     let step = $state(0);
     let canAdvance = $state(true);
@@ -19,6 +20,10 @@ import Splash from '$lib/splash.svelte';
             />
         {:else if step === 1}
             <Prerequisites
+                bind:canAdvance={canAdvance}
+            />
+        {:else if step === 2}
+            <Installer
                 bind:canAdvance={canAdvance}
             />
         {/if}

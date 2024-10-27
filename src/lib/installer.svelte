@@ -5,7 +5,7 @@
     import type { Nullable } from './nullable';
 
     let {
-        canAdvance,
+        canAdvance = $bindable(),
     }: BasicProps = $props();
 
     const SeaOfStarsRepo = "https://raw.githubusercontent.com/Ottermandias/SeaOfStars/main/repo.json";
@@ -47,7 +47,8 @@
 
 
         statuses.push('checking for Sea of Stars repository');
-        const trl = config['ThirdRepoList'] as any[];
+        console.dir(config);
+        const trl = config['ThirdRepoList']['$values'] as any[];
         let already: Nullable<string> = undefined;
         for (const repo of trl) {
             const url = repo['Url'] as Nullable<string>;
@@ -76,6 +77,8 @@
             trl.push(JSON.parse(repoJson));
         }
 
+        console.dir(config);
+
         statuses.push('downloading plugin information from Sea of Stars');
         const resp = await fetch(already || SeaOfStarsRepo);
         const repo = await resp.json() as any[];
@@ -89,11 +92,12 @@
             statuses.push('saving Dalamud configuration file');
             const result = await invoke('write_dalamud_config_json', {
                 json: JSON.stringify(config, undefined, 4),
-            }) as boolean;
-            if (!result) {
-                error = 'Could not save Dalamud configuration file';
-                return;
-            }
+            });
+            console.log(result);
+            //if (!result) {
+            //    error = 'could not save Dalamud configuration file';
+            //    return;
+            //}
         }
 
         // create penumbra config if necessary
@@ -109,7 +113,7 @@
             throw new Error('default profile was null');
         }
 
-        const plugins = profile['Plugins'] as Nullable<any[]>;
+        const plugins = profile['Plugins']['$values'] as Nullable<any[]>;
         if (plugins == null) {
             throw new Error('default profile plugins was null');
         }

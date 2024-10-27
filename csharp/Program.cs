@@ -95,8 +95,10 @@ public class Installer {
         var self = Installer.Instance;
 
         var manifestJson = Marshal.PtrToStringUTF8((nint) manifestJsonRaw, manifestLen)!;
-        var workingId = Marshal.PtrToStringUTF8((nint) workingIdRaw, workingIdLen);
+        var workingIdStr = Marshal.PtrToStringUTF8((nint) workingIdRaw, workingIdLen);
         var repoUrl = Marshal.PtrToStringUTF8((nint) repoUrlRaw, repoUrlLen);
+
+        var workingId = Guid.Parse(workingIdStr);
 
         var manifest = JsonConvert.DeserializeObject(manifestJson, self.LocalManifestType);
         self.LocalManifestProps["WorkingPluginId"].SetValue(manifest, workingId);

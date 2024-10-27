@@ -34,7 +34,7 @@ fn xl_path() -> Option<PathBuf> {
         None => return None,
     };
 
-    Some(dir.join("XIVLauncher").join("dalamudConfig.json"))
+    Some(dir.join("XIVLauncher"))
 }
 
 fn dalamud_config_path() -> Option<PathBuf> {
@@ -73,7 +73,7 @@ async fn create_plugin(
     set_cstr_stuff(&*loader);
     let make_plugin = loader
         .get_function_with_unmanaged_callers_only::<fn(*const u8, i32, *const u8, i32) -> *mut c_char>(
-            pdcstr!("HeliosphereInstaller.Installer, HeliosphereInstaller"),
+            pdcstr!("HeliosphereInstaller.Installer, heliosphere-installer"),
             pdcstr!("MakePlugin"),
         )
         .unwrap();
@@ -102,7 +102,7 @@ async fn create_repo(
     set_cstr_stuff(&*loader);
     let make_repo = loader
         .get_function_with_unmanaged_callers_only::<fn(*const u8, i32) -> *mut c_char>(
-            pdcstr!("HeliosphereInstaller.Installer, HeliosphereInstaller"),
+            pdcstr!("HeliosphereInstaller.Installer, heliosphere-installer"),
             pdcstr!("MakeRepo"),
         )
         .unwrap();
@@ -119,7 +119,7 @@ fn set_cstr_stuff(delegate_loader: &AssemblyDelegateLoader) {
     SET_FUNC_ONCE.call_once(|| {
         let set_copy_to_c_string = delegate_loader
             .get_function_with_unmanaged_callers_only::<fn(f: unsafe extern "system" fn(*const u16, i32) -> *mut c_char)>(
-                pdcstr!("HeliosphereInstaller.Installer, HeliosphereInstaller"),
+                pdcstr!("HeliosphereInstaller.Installer, heliosphere-installer"),
                 pdcstr!("SetCopyToCStringFunctionPtr"),
             )
             .unwrap();
@@ -162,7 +162,7 @@ async fn install_plugin_from_url(
     set_cstr_stuff(&*loader);
     let fill_out = loader
         .get_function_with_unmanaged_callers_only::<fn(*const u8, i32, *const u8, i32, *const u8, i32, *mut *mut c_char, *mut *mut c_char) -> *mut c_char>(
-            pdcstr!("HeliosphereInstaller.Installer, HeliosphereInstaller"),
+            pdcstr!("HeliosphereInstaller.Installer, heliosphere-installer"),
             pdcstr!("FillOutManifest"),
         )
         .unwrap();
@@ -173,10 +173,10 @@ async fn install_plugin_from_url(
         fill_out(
             manifest_json.as_ptr(),
             manifest_json.len() as i32,
-            repo_url.as_ptr(),
-            repo_url.len() as i32,
             id.as_ptr(),
             id.len() as i32,
+            repo_url.as_ptr(),
+            repo_url.len() as i32,
             &mut filled_out_json_ptr as *mut _,
             &mut version_ptr as &mut _,
         );
@@ -234,11 +234,11 @@ struct AppState {
 pub fn run() {
     let host = netcorehost::nethost::load_hostfxr().unwrap();
     let ctx = host.initialize_for_runtime_config(
-        pdcstr!("csharp/bin/Release/net8.0/heliosphere-installer.runtimeconfig.json")
+        pdcstr!("../csharp/bin/Release/net8.0/heliosphere-installer.runtimeconfig.json")
     ).unwrap();
     let delegate_loader = ctx
         .get_delegate_loader_for_assembly(pdcstr!(
-            "csharp/bin/Release/net8.0/heliosphere-installer.dll"
+            "../csharp/bin/Release/net8.0/heliosphere-installer.dll"
         ))
         .unwrap();
 
