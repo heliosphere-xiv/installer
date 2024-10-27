@@ -118,6 +118,22 @@ public class Installer {
         }
     }
 
+    [UnmanagedCallersOnly]
+    public static unsafe bool IsPathValid(byte* pathRaw, int pathLen) {
+        var path = Marshal.PtrToStringUTF8((nint) pathRaw, pathLen);
+
+        try {
+            var info = new DirectoryInfo(path);
+            if ((info.Attributes & (FileAttributes.ReadOnly | FileAttributes.System)) != 0) {
+                return false;
+            }
+        } catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException) {
+            return false;
+        }
+
+        return true;
+    }
+
     internal readonly static JsonSerializerSettings ConfigJsonSettings = new() {
         TypeNameHandling = TypeNameHandling.All,
         TypeNameAssemblyFormatHandling = TypeNameAssemblyFormatHandling.Simple,
@@ -218,11 +234,6 @@ public class Installer {
         this.ThirdRepoSettingsProps = thirdRepoSettingsProps;
     }
 
-    public static async Task Main() {
-        var installer = new Installer();
-        await installer.Install();
-    }
-
     private static (Type, Dictionary<string, PropertyInfo>) GetTypeAndProperties(Assembly assembly, string typeName, string[] propertyNames) {
         var type = assembly.GetType(typeName);
         if (type == null) {
@@ -250,229 +261,6 @@ public class Installer {
         }
 
         return props!;
-    }
-
-    private async Task Install() {
-        Console.Write("reading dalamud config... ");
-        var dalamudConfigPath = Path.Join(this.DalamudFolder, "dalamudConfig.json");
-
-        string dalamudConfigJson;
-        try {
-            dalamudConfigJson = await File.ReadAllTextAsync(dalamudConfigPath);
-            Console.WriteLine("done");
-        } catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException) {
-            Console.WriteLine("file not found");
-            return;
-        }
-
-        Console.WriteLine("parsing dalamud config...");
-
-        // load the config
-        this.Config = JsonConvert.DeserializeObject(dalamudConfigJson, this.ConfigurationType, Installer.ConfigJsonSettings);
-
-        Console.Write("adding sea of stars to repo list... ");
-
-        // add sea of stars to third party repo list if missing
-        var repos = (System.Collections.IList?) this.ConfigurationProps["ThirdRepoList"].GetValue(this.Config);
-        if (repos == null) {
-            throw new Exception("third-party repos list was null");
-        }
-
-        string? already = null;
-        foreach (var repo in repos) {
-            var url = (string?) this.ThirdRepoSettingsProps["Url"].GetValue(repo);
-            if (url == null) {
-                throw new Exception("third-party repo url was null");
-            }
-
-            if (url.StartsWith(SeaOfStarsStartsWith, StringComparison.InvariantCultureIgnoreCase)) {
-                already = url;
-                break;
-            }
-        }
-
-        if (already != null) {
-            Console.WriteLine("already exists");
-        } else {
-            this.ConfigModified = true;
-
-            var repo = Activator.CreateInstance(this.ThirdRepoSettingsType);
-            this.ThirdRepoSettingsProps["Name"].SetValue(repo, null);
-            this.ThirdRepoSettingsProps["Url"].SetValue(repo, SeaOfStarsRepo);
-            this.ThirdRepoSettingsProps["IsEnabled"].SetValue(repo, true);
-
-            repos.Add(repo);
-            Console.WriteLine("done");
-        }
-
-        Console.WriteLine("downloading sea of stars repo...");
-
-        var sosResp = await this.Client.GetAsync(already ?? SeaOfStarsRepo);
-        var sosStream = await sosResp.Content.ReadAsStringAsync();
-        var sosPlugins = JsonConvert.DeserializeObject<RepoPlugin[]>(sosStream)!;
-        var penumbraPlugin = sosPlugins.First(plugin => plugin.InternalName == PenumbraInternalName);
-        var heliospherePlugin = sosPlugins.First(plugin => plugin.InternalName == HeliosphereInternalName);
-
-        this.ConfigModified |= await this.InstallPlugin(penumbraPlugin, already ?? SeaOfStarsRepo);
-        this.ConfigModified |= await this.InstallPlugin(heliospherePlugin, already ?? SeaOfStarsRepo);
-
-        if (this.ConfigModified) {
-            Console.WriteLine("saving modified dalamud config...");
-
-            // re-save the config
-            var newJson = JsonConvert.SerializeObject(this.Config, this.ConfigurationType, Installer.ConfigJsonSettings);
-            File.WriteAllText(dalamudConfigPath, newJson);
-        } else {
-            Console.WriteLine("config not modified, skipping...");
-        }
-
-        await this.CreatePenumbraConfig(penumbraPlugin);
-
-        Console.WriteLine("installed!");
-    }
-
-    private async Task<bool> InstallPlugin(RepoPlugin repoPlugin, string repoUrl) {
-        Console.Write($"checking if {repoPlugin.InternalName} is already installed... ");
-        var defaultProfile = this.ConfigurationProps["DefaultProfile"].GetValue(this.Config);
-        if (defaultProfile == null) {
-            throw new Exception("default profile was null");
-        }
-
-        var plugins = (System.Collections.IList?) this.ProfileModelProps["Plugins"].GetValue(defaultProfile);
-        if (plugins == null) {
-            throw new Exception("plugins was null");
-        }
-
-        foreach (var installed in plugins) {
-            var installedName = (string?) this.ProfilePluginProps["InternalName"].GetValue(installed);
-            if (installedName == repoPlugin.InternalName) {
-                Console.WriteLine("yes");
-                return false;
-            }
-        }
-
-        Console.WriteLine("no");
-
-        Console.WriteLine($"installing {repoPlugin.InternalName}...");
-
-        var resp = await this.Client.GetAsync(repoPlugin.DownloadLinkInstall);
-        var zipStream = await resp.Content.ReadAsStreamAsync();
-
-        // generate a working id
-        var workingId = Guid.NewGuid();
-
-        // download and extract the zip
-        var zip = new ZipArchive(zipStream);
-        var zipEntry = zip.GetEntry($"{repoPlugin.InternalName}.json");
-        if (zipEntry == null) {
-            throw new Exception($"missing {repoPlugin.InternalName}.json");
-        }
-
-        var json = await new StreamReader(zipEntry.Open()).ReadToEndAsync();
-        var localManifest = JsonConvert.DeserializeObject(json, this.LocalManifestType);
-        this.LocalManifestProps["WorkingPluginId"].SetValue(localManifest, workingId);
-        this.LocalManifestProps["InstalledFromUrl"].SetValue(localManifest, repoUrl);
-
-        var version = (Version?) this.LocalManifestProps["AssemblyVersion"].GetValue(localManifest);
-        if (version == null) {
-            throw new Exception("version was null");
-        }
-
-        var installDir = Path.Join(
-            this.DalamudFolder,
-            "installedPlugins",
-            repoPlugin.InternalName,
-            version.ToString()
-        );
-
-        try {
-            Directory.Delete(installDir, true);
-        } catch (Exception ex) when (ex is DirectoryNotFoundException) {
-            // no-op
-        }
-
-        Directory.CreateDirectory(installDir);
-        zip.ExtractToDirectory(installDir);
-
-        await File.WriteAllTextAsync(Path.Join(installDir, $"{repoPlugin.InternalName}.json"), JsonConvert.SerializeObject(localManifest, this.LocalManifestType, Formatting.Indented, new JsonSerializerSettings()));
-
-        Console.WriteLine($"installing {repoPlugin.InternalName} into default profile...");
-
-        // install the plugin in the default profile
-        var plugin = Activator.CreateInstance(this.ProfilePluginType);
-        this.ProfilePluginProps["InternalName"].SetValue(plugin, repoPlugin.InternalName);
-        this.ProfilePluginProps["WorkingPluginId"].SetValue(plugin, workingId);
-        this.ProfilePluginProps["IsEnabled"].SetValue(plugin, true);
-
-        plugins.Add(plugin);
-
-        return true;
-    }
-
-    private async Task CreatePenumbraConfig(RepoPlugin plugin) {
-        var pluginConfigs = Path.Join(this.DalamudFolder, "pluginConfigs");
-        Directory.CreateDirectory(pluginConfigs);
-
-        var penumbraConfigPath = Path.Join(pluginConfigs, $"{plugin.InternalName}.json");
-        var good = false;
-        MiniPenumbraConfig? config = null;
-        try {
-            var penumbraJson = await File.ReadAllTextAsync(penumbraConfigPath);
-            config = JsonConvert.DeserializeObject<MiniPenumbraConfig>(penumbraJson)!;
-            var info = new DirectoryInfo(config.ModDirectory);
-            if (!info.Exists) {
-                Console.WriteLine("penumbra directory doesn't exist: creating...");
-                Directory.CreateDirectory(info.FullName);
-            }
-
-            var isGood = IsGood(info.FullName);
-            good = isGood;
-            if (!isGood) {
-                Console.WriteLine("penumbra directory is in a bad location, making you select another...");
-            }
-        } catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException) {
-            // no-op
-        }
-
-        if (good) {
-            return;
-        }
-
-        while (!good) {
-            Console.WriteLine("where would you like mods to be stored?");
-            Console.Write("> ");
-            var input = Console.ReadLine()?.Trim();
-            if (string.IsNullOrWhiteSpace(input)) {
-                continue;
-            }
-
-            try {
-                Directory.CreateDirectory(input);
-            } catch (Exception ex) {
-                Console.WriteLine($"could not create a directory at that path {ex.Message}. try again.");
-                continue;
-            }
-
-            good = IsGood(input);
-            if (good) {
-                config ??= new MiniPenumbraConfig();
-                config.ModDirectory = input;
-            }
-        }
-
-        Console.WriteLine("writing penumbra config...");
-        await File.WriteAllTextAsync(penumbraConfigPath, JsonConvert.SerializeObject(config, Formatting.Indented));
-
-        return;
-
-        static bool IsGood(string path) {
-            var info = new DirectoryInfo(path);
-            if ((info.Attributes & (FileAttributes.ReadOnly | FileAttributes.System)) != 0) {
-                return false;
-            }
-
-            return true;
-        }
     }
 }
 

@@ -273,7 +273,11 @@ async fn install_plugin_from_url(
 }
 
 #[tauri::command]
-async fn check_path_validity(path: &str, create: bool) -> Result<bool, ()> {
+async fn check_path_validity(
+    path: &str,
+    create: bool,
+    state: State<'_, AppState>,
+) -> Result<bool, ()> {
     let path = Path::new(path);
 
     if create {
@@ -287,11 +291,26 @@ async fn check_path_validity(path: &str, create: bool) -> Result<bool, ()> {
         Err(_) => return Ok(false),
     };
 
-    if meta.permissions().readonly() {
+    if meta.permissions().readonly() || !meta.is_dir() {
         return Ok(false);
     }
 
-    Ok(meta.is_dir())
+    let loader = state.delegate_loader.lock().await;
+
+    set_cstr_stuff(&*loader);
+    let check_valid = loader
+        .get_function_with_unmanaged_callers_only::<fn(*const u8, i32) -> bool>(
+            pdcstr!("HeliosphereInstaller.Installer, heliosphere-installer"),
+            pdcstr!("IsPathValid"),
+        )
+        .unwrap();
+
+    let path_str = match path.to_str() {
+        Some(p) => p,
+        None => return Ok(false),
+    };
+
+    Ok(check_valid(path_str.as_ptr(), path_str.len() as i32))
 }
 
 struct AppState {
