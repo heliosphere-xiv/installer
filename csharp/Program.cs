@@ -82,15 +82,37 @@ public class Installer {
     }
 
     [UnmanagedCallersOnly]
-    public static unsafe byte* FillOutManifest(byte* manifestJsonRaw) {
+    public static unsafe void FillOutManifest(
+        byte* manifestJsonRaw,
+        int manifestLen,
+        byte* workingIdRaw,
+        int workingIdLen,
+        byte* repoUrlRaw,
+        int repoUrlLen,
+        byte** outManifestJson,
+        byte** outVersion
+    ) {
         var self = Installer.Instance;
 
-        var manifestJson = Marshal.PtrToStringUTF8((nint) manifestJsonRaw)!;
+        var manifestJson = Marshal.PtrToStringUTF8((nint) manifestJsonRaw, manifestLen)!;
+        var workingId = Marshal.PtrToStringUTF8((nint) workingIdRaw, workingIdLen);
+        var repoUrl = Marshal.PtrToStringUTF8((nint) repoUrlRaw, repoUrlLen);
 
         var manifest = JsonConvert.DeserializeObject(manifestJson, self.LocalManifestType);
+        self.LocalManifestProps["WorkingPluginId"].SetValue(manifest, workingId);
+        self.LocalManifestProps["InstalledFromUrl"].SetValue(manifest, repoUrl);
+
         var json = JsonConvert.SerializeObject(manifest, self.LocalManifestType, new JsonSerializerSettings());
-        fixed(char* ptr = json) {
-            return CopyToCString(ptr, json.Length);
+        fixed (char* ptr = json) {
+            *outManifestJson = CopyToCString(ptr, json.Length);
+        }
+
+        var version = (Version?) self.LocalManifestProps["AssemblyVersion"].GetValue(manifest);
+        if (version != null) {
+            var versionStr = version.ToString();
+            fixed (char* ptr = versionStr) {
+                *outVersion = CopyToCString(ptr, versionStr.Length);
+            }
         }
     }
 

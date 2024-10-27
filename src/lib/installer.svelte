@@ -125,6 +125,7 @@
         statuses.push(`installing ${name}`);
 
         const workingPluginId = await invoke('install_plugin_from_url', {
+            internalName: name,
             url: plugin['DownloadLinkInstall'],
             repoUrl,
         }) as Nullable<string>;
