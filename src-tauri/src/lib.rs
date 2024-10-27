@@ -118,6 +118,10 @@ async fn create_plugin(
         working_id.len() as i32,
     );
 
+    if json_ptr.is_null() {
+        return Err("failed to make plugin".into());
+    }
+
     let json = unsafe { CString::from_raw(json_ptr) };
 
     json.to_str()
@@ -138,6 +142,10 @@ async fn create_repo(url: &str, state: State<'_, AppState>) -> Result<String, St
         .unwrap();
 
     let json_ptr = make_repo(url.as_ptr(), url.len() as i32);
+    if json_ptr.is_null() {
+        return Err("failed to make repo".into());
+    }
+
     let json = unsafe { CString::from_raw(json_ptr) };
 
     json.to_str()
@@ -206,7 +214,7 @@ async fn install_plugin_from_url(
             i32,
             *mut *mut c_char,
             *mut *mut c_char,
-        ) -> *mut c_char>(
+        ) -> u8>(
             pdcstr!("HeliosphereInstaller.Installer, heliosphere-installer"),
             pdcstr!("FillOutManifest"),
         )
@@ -215,7 +223,7 @@ async fn install_plugin_from_url(
     let (filled_out_json, version) = {
         let mut filled_out_json_ptr: *mut c_char = std::ptr::null_mut();
         let mut version_ptr: *mut c_char = std::ptr::null_mut();
-        fill_out(
+        let result = fill_out(
             manifest_json.as_ptr(),
             manifest_json.len() as i32,
             id.as_ptr(),
@@ -226,7 +234,7 @@ async fn install_plugin_from_url(
             &mut version_ptr as &mut _,
         );
 
-        if filled_out_json_ptr.is_null() || version_ptr.is_null() {
+        if result == 0 || filled_out_json_ptr.is_null() || version_ptr.is_null() {
             return Err("failed to fill out manifest".into());
         }
 
@@ -310,7 +318,12 @@ async fn check_path_validity(
         None => return Ok(false),
     };
 
-    Ok(check_valid(path_str.as_ptr(), path_str.len() as i32) != 0)
+    let result = check_valid(path_str.as_ptr(), path_str.len() as i32);
+    if result == 0xFF {
+        return Err(());
+    }
+
+    Ok(result != 0)
 }
 
 #[tauri::command]
@@ -344,7 +357,7 @@ async fn initialise(
             i32,
             *const u8,
             i32,
-        )>(
+        ) -> u8>(
             pdcstr!("HeliosphereInstaller.Installer, heliosphere-installer"),
             pdcstr!("Initialise"),
         )
@@ -365,7 +378,7 @@ async fn initialise(
         None => return Ok(false),
     };
 
-    initialise(
+    let result = initialise(
         dalamud_path_str.as_ptr(),
         dalamud_path_str.len() as i32,
         dalamud_common_path_str.as_ptr(),
@@ -373,6 +386,10 @@ async fn initialise(
         newtonsoft_path_str.as_ptr(),
         newtonsoft_path_str.len() as i32,
     );
+
+    if result == 0 {
+        return Err(());
+    }
 
     Ok(true)
 }

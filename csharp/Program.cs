@@ -39,7 +39,7 @@ public class Installer {
     public static unsafe void SetCopyToCStringFunctionPtr(delegate*<char*, int, byte*> copyToCString) => CopyToCString = copyToCString;
 
     [UnmanagedCallersOnly]
-    public static unsafe void Initialise(
+    public static unsafe byte Initialise(
         byte* dalamudPathRaw,
         int dalamudPathLen,
         byte* dalamudCommonPathRaw,
@@ -47,30 +47,39 @@ public class Installer {
         byte* newtonsoftPathRaw,
         int newtonsoftPathLen
     ) {
-        var dalamudPath = Marshal.PtrToStringUTF8((nint) dalamudPathRaw, dalamudPathLen);
-        var dalamudCommonPath = Marshal.PtrToStringUTF8((nint) dalamudCommonPathRaw, dalamudCommonPathLen);
-        var newtonsoftPath = Marshal.PtrToStringUTF8((nint) newtonsoftPathRaw, newtonsoftPathLen);
+        try {
+            var dalamudPath = Marshal.PtrToStringUTF8((nint) dalamudPathRaw, dalamudPathLen);
+            var dalamudCommonPath = Marshal.PtrToStringUTF8((nint) dalamudCommonPathRaw, dalamudCommonPathLen);
+            var newtonsoftPath = Marshal.PtrToStringUTF8((nint) newtonsoftPathRaw, newtonsoftPathLen);
 
-        var newtonsoft = Assembly.LoadFrom(newtonsoftPath);
-        Assembly.LoadFrom(dalamudCommonPath);
-        var dalamud = Assembly.LoadFrom(dalamudPath);
-        Installer.Instance = new Installer(dalamud, newtonsoft);
+            var newtonsoft = Assembly.LoadFrom(newtonsoftPath);
+            Assembly.LoadFrom(dalamudCommonPath);
+            var dalamud = Assembly.LoadFrom(dalamudPath);
+            Installer.Instance = new Installer(dalamud, newtonsoft);
+            return 1;
+        } catch {
+            return 0;
+        }
     }
 
     [UnmanagedCallersOnly]
     public static unsafe byte* MakeRepo(byte* urlRaw, int urlLen) {
-        var self = Installer.Instance;
+        try {
+            var self = Installer.Instance;
 
-        var url = Marshal.PtrToStringUTF8((nint) urlRaw, urlLen);
+            var url = Marshal.PtrToStringUTF8((nint) urlRaw, urlLen);
 
-        var repo = Activator.CreateInstance(self.ThirdRepoSettingsType);
-        self.ThirdRepoSettingsProps["Name"].SetValue(repo, null);
-        self.ThirdRepoSettingsProps["Url"].SetValue(repo, url);
-        self.ThirdRepoSettingsProps["IsEnabled"].SetValue(repo, true);
+            var repo = Activator.CreateInstance(self.ThirdRepoSettingsType);
+            self.ThirdRepoSettingsProps["Name"].SetValue(repo, null);
+            self.ThirdRepoSettingsProps["Url"].SetValue(repo, url);
+            self.ThirdRepoSettingsProps["IsEnabled"].SetValue(repo, true);
 
-        var json = self.Serde.Serialise(repo, self.ThirdRepoSettingsType, self.Serde.ConfigJsonSettings);
-        fixed (char* ptr = json) {
-            return CopyToCString(ptr, json.Length);
+            var json = self.Serde.Serialise(repo, self.ThirdRepoSettingsType, self.Serde.ConfigJsonSettings);
+            fixed (char* ptr = json) {
+                return CopyToCString(ptr, json.Length);
+            }
+        } catch {
+            return null;
         }
     }
 
@@ -81,25 +90,29 @@ public class Installer {
         byte* workingIdRaw,
         int workingIdLen
     ) {
-        var self = Installer.Instance;
+        try {
+            var self = Installer.Instance;
 
-        var internalName = Marshal.PtrToStringUTF8((nint) internalNameRaw, internalNameLen);
-        var workingIdStr = Marshal.PtrToStringUTF8((nint) workingIdRaw, workingIdLen)!;
-        var workingId = Guid.Parse(workingIdStr);
+            var internalName = Marshal.PtrToStringUTF8((nint) internalNameRaw, internalNameLen);
+            var workingIdStr = Marshal.PtrToStringUTF8((nint) workingIdRaw, workingIdLen)!;
+            var workingId = Guid.Parse(workingIdStr);
 
-        var plugin = Activator.CreateInstance(self.ProfilePluginType);
-        self.ProfilePluginProps["InternalName"].SetValue(plugin, internalName);
-        self.ProfilePluginProps["WorkingPluginId"].SetValue(plugin, workingId);
-        self.ProfilePluginProps["IsEnabled"].SetValue(plugin, true);
+            var plugin = Activator.CreateInstance(self.ProfilePluginType);
+            self.ProfilePluginProps["InternalName"].SetValue(plugin, internalName);
+            self.ProfilePluginProps["WorkingPluginId"].SetValue(plugin, workingId);
+            self.ProfilePluginProps["IsEnabled"].SetValue(plugin, true);
 
-        var json = self.Serde.Serialise(plugin, self.ProfilePluginType, self.Serde.ConfigJsonSettings);
-        fixed (char* ptr = json) {
-            return CopyToCString(ptr, json.Length);
+            var json = self.Serde.Serialise(plugin, self.ProfilePluginType, self.Serde.ConfigJsonSettings);
+            fixed (char* ptr = json) {
+                return CopyToCString(ptr, json.Length);
+            }
+        } catch {
+            return null;
         }
     }
 
     [UnmanagedCallersOnly]
-    public static unsafe void FillOutManifest(
+    public static unsafe byte FillOutManifest(
         byte* manifestJsonRaw,
         int manifestLen,
         byte* workingIdRaw,
@@ -109,29 +122,37 @@ public class Installer {
         byte** outManifestJson,
         byte** outVersion
     ) {
-        var self = Installer.Instance;
+        try {
+            var self = Installer.Instance;
 
-        var manifestJson = Marshal.PtrToStringUTF8((nint) manifestJsonRaw, manifestLen)!;
-        var workingIdStr = Marshal.PtrToStringUTF8((nint) workingIdRaw, workingIdLen);
-        var repoUrl = Marshal.PtrToStringUTF8((nint) repoUrlRaw, repoUrlLen);
+            var manifestJson = Marshal.PtrToStringUTF8((nint) manifestJsonRaw, manifestLen)!;
+            var workingIdStr = Marshal.PtrToStringUTF8((nint) workingIdRaw, workingIdLen);
+            var repoUrl = Marshal.PtrToStringUTF8((nint) repoUrlRaw, repoUrlLen);
 
-        var workingId = Guid.Parse(workingIdStr);
+            var workingId = Guid.Parse(workingIdStr);
 
-        var manifest = self.Serde.Deserialise(manifestJson, self.LocalManifestType);
-        self.LocalManifestProps["WorkingPluginId"].SetValue(manifest, workingId);
-        self.LocalManifestProps["InstalledFromUrl"].SetValue(manifest, repoUrl);
+            var manifest = self.Serde.Deserialise(manifestJson, self.LocalManifestType);
+            self.LocalManifestProps["WorkingPluginId"].SetValue(manifest, workingId);
+            self.LocalManifestProps["InstalledFromUrl"].SetValue(manifest, repoUrl);
 
-        var json = self.Serde.Serialise(manifest, self.LocalManifestType, 1);
-        fixed (char* ptr = json) {
-            *outManifestJson = CopyToCString(ptr, json.Length);
-        }
-
-        var version = (Version?) self.LocalManifestProps["AssemblyVersion"].GetValue(manifest);
-        if (version != null) {
-            var versionStr = version.ToString();
-            fixed (char* ptr = versionStr) {
-                *outVersion = CopyToCString(ptr, versionStr.Length);
+            var json = self.Serde.Serialise(manifest, self.LocalManifestType, 1);
+            fixed (char* ptr = json) {
+                *outManifestJson = CopyToCString(ptr, json.Length);
             }
+
+            var version = (Version?) self.LocalManifestProps["AssemblyVersion"].GetValue(manifest);
+            if (version != null) {
+                var versionStr = version.ToString();
+                fixed (char* ptr = versionStr) {
+                    *outVersion = CopyToCString(ptr, versionStr.Length);
+                }
+            }
+
+            return 1;
+        } catch {
+            *outManifestJson = null;
+            *outVersion = null;
+            return 0;
         }
     }
 
@@ -152,29 +173,33 @@ public class Installer {
 
     [UnmanagedCallersOnly]
     public static unsafe byte IsPathValid(byte* pathRaw, int pathLen) {
-        var path = Marshal.PtrToStringUTF8((nint) pathRaw, pathLen);
-
-        foreach (var badRootKind in BadRoots) {
-            var badRoot = Environment.GetFolderPath(badRootKind);
-
-            var badUri = new Uri(MakeEndWithSeparator(badRoot));
-            var pathUri = new Uri(MakeEndWithSeparator(path));
-
-            if (badUri.IsBaseOf(pathUri)) {
-                return 0;
-            }
-        }
-
         try {
-            var info = new DirectoryInfo(path);
-            if ((info.Attributes & (FileAttributes.ReadOnly | FileAttributes.System)) != 0) {
+            var path = Marshal.PtrToStringUTF8((nint) pathRaw, pathLen);
+
+            foreach (var badRootKind in BadRoots) {
+                var badRoot = Environment.GetFolderPath(badRootKind);
+
+                var badUri = new Uri(MakeEndWithSeparator(badRoot));
+                var pathUri = new Uri(MakeEndWithSeparator(path));
+
+                if (badUri.IsBaseOf(pathUri)) {
+                    return 0;
+                }
+            }
+
+            try {
+                var info = new DirectoryInfo(path);
+                if ((info.Attributes & (FileAttributes.ReadOnly | FileAttributes.System)) != 0) {
+                    return 0;
+                }
+            } catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException) {
                 return 0;
             }
-        } catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException) {
-            return 0;
-        }
 
-        return 1;
+            return 1;
+        } catch {
+            return 0xFF;
+        }
     }
 
     private Installer(Assembly dalamud, Assembly newtonsoft) {
