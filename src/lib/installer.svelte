@@ -3,6 +3,7 @@
     import type BasicProps from './basicProps';
     import { invoke } from '@tauri-apps/api/core';
     import type { Nullable } from './nullable';
+    import { open } from '@tauri-apps/plugin-dialog';
 
     let {
         canAdvance = $bindable(),
@@ -15,10 +16,12 @@
 
     let statuses: string[] = $state([]);
     let error: Nullable<string> = $state(undefined);
+    let showPrompt: [boolean | string, any] = $state([false, undefined]);
     let configModified = false;
 
     onMount(() => {
         canAdvance = false;
+        showPrompt = [false, undefined];
         statuses = [];
         configModified = false;
         error = undefined;
@@ -36,7 +39,7 @@
 
     async function startInner() {
         statuses.push('loading Dalamud configuration file');
-        const json = await invoke('get_dalamud_config_json') as Nullable<string>;
+        const json = await invoke<Nullable<string>>('get_dalamud_config_json');
         if (json == null) {
             error = 'could not read dalamudConfig.json';
             return;
@@ -66,9 +69,9 @@
             statuses.push('adding Sea of Stars repository');
 
             configModified = true;
-            const repoJson = await invoke('create_repo', {
+            const repoJson = await invoke<Nullable<string>>('create_repo', {
                 url: SeaOfStarsRepo,
-            }) as Nullable<string>;
+            });
 
             if (repoJson == null) {
                 throw new Error('failed to make repo');
@@ -100,8 +103,36 @@
             //}
         }
 
-        // create penumbra config if necessary
-        canAdvance = true;
+        statuses.push('checking Penumbra mod directory');
+        let penumbraConfig: any = undefined;
+        try {
+            const json = await invoke<string>('get_plugin_config_json', {
+                internalName: penumbraPlugin['InternalName'],
+            });
+
+            penumbraConfig = JSON.parse(json);
+        } catch {
+            // no-op
+        }
+
+        const dir = penumbraConfig?.['ModDirectory'];
+        if (dir == null || dir.length === 0) {
+            showPrompt = [true, penumbraConfig];
+        } else {
+            // check validity
+            const valid = await invoke<boolean>('check_path_validity', {
+                path: dir,
+                create: true,
+            });
+
+            showPrompt = [!valid, penumbraConfig];
+        }
+
+        if (showPrompt[0] !== false) {
+            statuses.push('prompting for new Penumbra directory');
+        }
+
+        canAdvance = !showPrompt[0];
     }
 
     async function installPlugin(plugin: any, config: any, repoUrl: string): Promise<boolean> {
@@ -128,20 +159,20 @@
 
         statuses.push(`installing ${name}`);
 
-        const workingPluginId = await invoke('install_plugin_from_url', {
+        const workingPluginId = await invoke<Nullable<string>>('install_plugin_from_url', {
             internalName: name,
             url: plugin['DownloadLinkInstall'],
             repoUrl,
-        }) as Nullable<string>;
+        });
 
         if (workingPluginId == null) {
             throw new Error('install failed');
         }
 
-        const pluginJson = await invoke('create_plugin', {
+        const pluginJson = await invoke<Nullable<string>>('create_plugin', {
             internalName: name,
             workingId: workingPluginId,
-        }) as Nullable<string>;
+        });
 
         if (pluginJson == null) {
             throw new Error('could not create plugin');
@@ -149,6 +180,52 @@
 
         plugins.push(JSON.parse(pluginJson));
         return true;
+    }
+
+    async function choosePenumbraDir() {
+        const dir = await open({
+            multiple: false,
+            directory: true,
+            title: 'Choose Penumbra root directory',
+        });
+
+        if (dir == null) {
+            return;
+        }
+
+        const valid = await invoke<boolean>('check_path_validity', {
+            path: dir,
+            create: false,
+        });
+
+        if (!valid) {
+            showPrompt[0] = 'Invalid directory. Pick a different one.';
+            return;
+        }
+
+        await finishSetup(dir);
+    }
+
+    async function finishSetup(path: string) {
+        statuses.push('updating Penumbra config');
+
+        showPrompt[0] = false;
+
+        let config = showPrompt[1];
+        if (config == null) {
+            config = {};
+        }
+
+        config['ModDirectory'] = path;
+
+        statuses.push('saving Penumbra config');
+
+        await invoke('write_plugin_config_json', {
+            internalName: PenumbraInternalName,
+            json: JSON.stringify(config),
+        });
+
+        canAdvance = true;
     }
 </script>
 
@@ -159,8 +236,25 @@
         {error}
     {/if}
 
+    {#if showPrompt[0] !== false}
+        <label>
+            Where would you like mods to be stored?
+            <button
+                onclick={choosePenumbraDir}
+            >
+                Pick folder
+            </button>
+        </label>
+
+        {#if typeof showPrompt[0] === 'string'}
+            <small>
+                {showPrompt[0]}
+            </small>
+        {/if}
+    {/if}
+
     <ul>
-        {#each statuses as status}
+        {#each [...statuses].reverse() as status}
             <li>{status}</li>
         {/each}
     </ul>

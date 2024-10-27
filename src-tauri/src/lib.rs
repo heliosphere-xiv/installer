@@ -1,26 +1,29 @@
-use std::{ffi::c_char, io::{Cursor, Read}, path::PathBuf, sync::Once};
+use std::{
+    convert::Infallible,
+    ffi::c_char,
+    io::{Cursor, Read},
+    path::{Path, PathBuf},
+    sync::Once,
+};
 
 use netcorehost::{hostfxr::AssemblyDelegateLoader, pdcstr};
 use reqwest::Client;
+use std::ffi::CString;
 use sysinfo::{ProcessRefreshKind, RefreshKind, System, UpdateKind};
 use tauri::State;
 use tokio::sync::Mutex;
 use uuid::Uuid;
 use zip::ZipArchive;
-use std::ffi::CString;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
 fn check_for_process(name: &str) -> bool {
     let system = System::new_with_specifics(
-        RefreshKind::new()
-            .with_processes(
-                ProcessRefreshKind::new()
-                    .with_exe(UpdateKind::Always)
-            )
+        RefreshKind::new().with_processes(ProcessRefreshKind::new().with_exe(UpdateKind::Always)),
     );
 
-    return system.processes()
+    return system
+        .processes()
         .values()
         .flat_map(|process| process.exe())
         .flat_map(|path| path.file_name())
@@ -58,22 +61,24 @@ async fn get_dalamud_config_json() -> Option<String> {
 async fn write_dalamud_config_json(json: &str) -> Result<(), String> {
     let config_path = dalamud_config_path()
         .ok_or_else(|| "could not determine dalamud config path".to_string())?;
-    tokio::fs::write(&config_path, json).await
+    tokio::fs::write(&config_path, json)
+        .await
         .map_err(|e| format!("{e:#}"))
 }
 
 fn plugin_config_path(internal_name: &str) -> Option<PathBuf> {
-    xl_path().map(|path| path
-        .join("pluginConfigs")
-        .join(&format!("{internal_name}.json"))
-    )
+    xl_path().map(|path| {
+        path.join("pluginConfigs")
+            .join(&format!("{internal_name}.json"))
+    })
 }
 
 #[tauri::command]
 async fn get_plugin_config_json(internal_name: &str) -> Result<String, String> {
-    let config_path = plugin_config_path(internal_name)
-        .ok_or_else(|| "could not get config path".to_string())?;
-    tokio::fs::read_to_string(&config_path).await
+    let config_path =
+        plugin_config_path(internal_name).ok_or_else(|| "could not get config path".to_string())?;
+    tokio::fs::read_to_string(&config_path)
+        .await
         .map_err(|e| format!("failed to write config: {e:#}"))
 }
 
@@ -81,8 +86,14 @@ async fn get_plugin_config_json(internal_name: &str) -> Result<String, String> {
 async fn write_plugin_config_json(internal_name: &str, json: &str) -> Result<(), String> {
     let config_path = plugin_config_path(internal_name)
         .ok_or_else(|| "could not determine plugin config path".to_string())?;
-    tokio::fs::write(&config_path, json).await
-        .map_err(|e| format!("{e:#}"))
+    if let Some(parent) = config_path.parent() {
+        tokio::fs::create_dir_all(parent)
+            .await
+            .map_err(|e| format!("could not create parent: {e:#}"))?;
+    }
+    tokio::fs::write(&config_path, json)
+        .await
+        .map_err(|e| format!("could not write config: {e:#}"))
 }
 
 #[tauri::command]
@@ -116,10 +127,7 @@ async fn create_plugin(
 }
 
 #[tauri::command]
-async fn create_repo(
-    url: &str,
-    state: State<'_, AppState>,
-) -> Result<String, String> {
+async fn create_repo(url: &str, state: State<'_, AppState>) -> Result<String, String> {
     let loader = state.delegate_loader.lock().await;
 
     set_cstr_stuff(&*loader);
@@ -158,7 +166,9 @@ async fn install_plugin_from_url(
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     // make request for the plugin zip
-    let resp = state.http.get(url)
+    let resp = state
+        .http
+        .get(url)
         .send()
         .await
         .map_err(|e| format!("could not request plugin: {e:#}"))?;
@@ -167,16 +177,20 @@ async fn install_plugin_from_url(
     let id = Uuid::new_v4().to_string();
 
     // download and extract the zip
-    let bytes = resp.bytes().await
+    let bytes = resp
+        .bytes()
+        .await
         .map_err(|e| format!("could not download plugin: {e:#}"))?;
     let cursor = Cursor::new(&*bytes);
-    let mut zip = ZipArchive::new(cursor)
-        .map_err(|e| format!("could not process zip archive: {e:#}"))?;
+    let mut zip =
+        ZipArchive::new(cursor).map_err(|e| format!("could not process zip archive: {e:#}"))?;
     let mut manifest_json = String::new();
     {
-        let mut entry = zip.by_name(&format!("{internal_name}.json"))
+        let mut entry = zip
+            .by_name(&format!("{internal_name}.json"))
             .map_err(|e| format!("could not get manifest: {e:#}"))?;
-        entry.read_to_string(&mut manifest_json)
+        entry
+            .read_to_string(&mut manifest_json)
             .map_err(|e| format!("could not extract manifest: {e:#}"))?;
     }
 
@@ -184,7 +198,16 @@ async fn install_plugin_from_url(
 
     set_cstr_stuff(&*loader);
     let fill_out = loader
-        .get_function_with_unmanaged_callers_only::<fn(*const u8, i32, *const u8, i32, *const u8, i32, *mut *mut c_char, *mut *mut c_char) -> *mut c_char>(
+        .get_function_with_unmanaged_callers_only::<fn(
+            *const u8,
+            i32,
+            *const u8,
+            i32,
+            *const u8,
+            i32,
+            *mut *mut c_char,
+            *mut *mut c_char,
+        ) -> *mut c_char>(
             pdcstr!("HeliosphereInstaller.Installer, heliosphere-installer"),
             pdcstr!("FillOutManifest"),
         )
@@ -211,18 +234,19 @@ async fn install_plugin_from_url(
         let filled_out_json = unsafe { CString::from_raw(filled_out_json_ptr) };
         let version = unsafe { CString::from_raw(version_ptr) };
 
-        let filled_out_json = filled_out_json.to_str()
+        let filled_out_json = filled_out_json
+            .to_str()
             .map_err(|e| format!("json was invalid: {e:#}"))?
             .to_string();
-        let version = version.to_str()
+        let version = version
+            .to_str()
             .map_err(|e| format!("json was invalid: {e:#}"))?
             .to_string();
 
         (filled_out_json, version)
     };
 
-    let dir = xl_path()
-        .ok_or_else(|| format!("could not determine xivlauncher config path"))?;
+    let dir = xl_path().ok_or_else(|| format!("could not determine xivlauncher config path"))?;
     let install_dir = dir
         .join("installedPlugins")
         .join(internal_name)
@@ -235,16 +259,40 @@ async fn install_plugin_from_url(
         _ => {}
     }
 
-    tokio::fs::create_dir_all(&install_dir).await
+    tokio::fs::create_dir_all(&install_dir)
+        .await
         .map_err(|e| format!("could not create install dir: {e:#}"))?;
     zip.extract(&install_dir)
         .map_err(|e| format!("could not extract zip: {e:#}"))?;
 
     let manifest_path = install_dir.join(&format!("{internal_name}.json"));
-    tokio::fs::write(manifest_path, filled_out_json).await
+    tokio::fs::write(manifest_path, filled_out_json)
+        .await
         .map_err(|e| format!("could not write manifest: {e:#}"))?;
 
     Ok(id)
+}
+
+#[tauri::command]
+async fn check_path_validity(path: &str, create: bool) -> Result<bool, Infallible> {
+    let path = Path::new(path);
+
+    if create {
+        if tokio::fs::create_dir_all(path).await.is_err() {
+            return Ok(false);
+        }
+    }
+
+    let meta = match tokio::fs::metadata(path).await {
+        Ok(m) => m,
+        Err(_) => return Ok(false),
+    };
+
+    if meta.permissions().readonly() {
+        return Ok(false);
+    }
+
+    Ok(meta.is_dir())
 }
 
 struct AppState {
@@ -255,9 +303,11 @@ struct AppState {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let host = netcorehost::nethost::load_hostfxr().unwrap();
-    let ctx = host.initialize_for_runtime_config(
-        pdcstr!("../csharp/bin/Release/net8.0/heliosphere-installer.runtimeconfig.json")
-    ).unwrap();
+    let ctx = host
+        .initialize_for_runtime_config(pdcstr!(
+            "../csharp/bin/Release/net8.0/heliosphere-installer.runtimeconfig.json"
+        ))
+        .unwrap();
     let delegate_loader = ctx
         .get_delegate_loader_for_assembly(pdcstr!(
             "../csharp/bin/Release/net8.0/heliosphere-installer.dll"
@@ -265,6 +315,7 @@ pub fn run() {
         .unwrap();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
             check_for_process,
@@ -276,6 +327,7 @@ pub fn run() {
             create_plugin,
             create_repo,
             install_plugin_from_url,
+            check_path_validity,
         ])
         .manage(AppState {
             delegate_loader: Mutex::new(delegate_loader),
