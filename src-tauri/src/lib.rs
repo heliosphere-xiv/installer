@@ -1,5 +1,4 @@
 use std::{
-    convert::Infallible,
     ffi::c_char,
     io::{Cursor, Read},
     path::{Path, PathBuf},
@@ -274,7 +273,7 @@ async fn install_plugin_from_url(
 }
 
 #[tauri::command]
-async fn check_path_validity(path: &str, create: bool) -> Result<bool, Infallible> {
+async fn check_path_validity(path: &str, create: bool) -> Result<bool, ()> {
     let path = Path::new(path);
 
     if create {
