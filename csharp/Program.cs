@@ -178,7 +178,6 @@ public class Installer {
     }
 
     private Installer(Assembly dalamud, Assembly newtonsoft) {
-        this.Serde = new Serde(newtonsoft);
         this.Client = new HttpClient();
         this.DalamudFolder = Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "XIVLauncher");
 
@@ -268,6 +267,8 @@ public class Installer {
 
         this.ThirdRepoSettingsType = thirdRepoSettingsType;
         this.ThirdRepoSettingsProps = thirdRepoSettingsProps;
+
+        this.Serde = new Serde(newtonsoft, this.ConfigurationType);
     }
 
     private static (Type, Dictionary<string, PropertyInfo>) GetTypeAndProperties(Assembly assembly, string typeName, string[] propertyNames) {
@@ -313,16 +314,14 @@ public class RepoPlugin {
 
 public class Serde {
     private Type SettingsType { get; }
-    private Type FormattingType { get; }
     private MethodInfo SerialiseMethod { get; }
     private MethodInfo DeserialiseMethod { get; }
     public object ConfigJsonSettings { get; }
 
-    public Serde(Assembly assembly) {
-        var convert = assembly.GetType("Newtonsoft.Json.JsonConvert");
-        var settings = assembly.GetType("Newtonsoft.Json.JsonSerializerSettings");
-        var formatting = assembly.GetType("Newtonsoft.Json.Formatting");
-        if (convert == null || settings == null || formatting == null) {
+    public Serde(Assembly newtonsoft, Type dalamudConfig) {
+        var convert = newtonsoft.GetType("Newtonsoft.Json.JsonConvert");
+        var settings = newtonsoft.GetType("Newtonsoft.Json.JsonSerializerSettings");
+        if (convert == null || settings == null) {
             throw new Exception("missing JsonConvert, JsonSerializerSettings, or Formatting");
         }
 
@@ -352,16 +351,12 @@ public class Serde {
                     && method.GetParameters().Select(param => param.ParameterType).SequenceEqual(deserialiseParams)
             );
 
-        var configSettings = Activator.CreateInstance(settings)!;
-        settings.GetProperty("TypeNameHandling")!.SetValue(configSettings, 1 | 2);
-        settings.GetProperty("TypeNameAssemblyFormatHandling")!.SetValue(configSettings, 0);
-        settings.GetProperty("Formatting")!.SetValue(configSettings, 1);
+        var settingsField = dalamudConfig.GetField("SerializerSettings", BindingFlags.Static | BindingFlags.NonPublic);
+        this.ConfigJsonSettings = settingsField!.GetValue(null) ?? throw new Exception("json settings were null");
 
         this.SettingsType = settings;
-        this.FormattingType = formatting;
         this.SerialiseMethod = serialiseMethod;
         this.DeserialiseMethod = deserialiseMethod;
-        this.ConfigJsonSettings = configSettings;
     }
 
     public string Serialise(object? obj, Type type, int formatting, object? settings = null) {
