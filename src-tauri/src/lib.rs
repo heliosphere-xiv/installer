@@ -62,6 +62,29 @@ async fn write_dalamud_config_json(json: &str) -> Result<(), String> {
         .map_err(|e| format!("{e:#}"))
 }
 
+fn plugin_config_path(internal_name: &str) -> Option<PathBuf> {
+    xl_path().map(|path| path
+        .join("pluginConfigs")
+        .join(&format!("{internal_name}.json"))
+    )
+}
+
+#[tauri::command]
+async fn get_plugin_config_json(internal_name: &str) -> Result<String, String> {
+    let config_path = plugin_config_path(internal_name)
+        .ok_or_else(|| "could not get config path".to_string())?;
+    tokio::fs::read_to_string(&config_path).await
+        .map_err(|e| format!("failed to write config: {e:#}"))
+}
+
+#[tauri::command]
+async fn write_plugin_config_json(internal_name: &str, json: &str) -> Result<(), String> {
+    let config_path = plugin_config_path(internal_name)
+        .ok_or_else(|| "could not determine plugin config path".to_string())?;
+    tokio::fs::write(&config_path, json).await
+        .map_err(|e| format!("{e:#}"))
+}
+
 #[tauri::command]
 async fn create_plugin(
     internal_name: &str,
@@ -198,7 +221,6 @@ async fn install_plugin_from_url(
         (filled_out_json, version)
     };
 
-
     let dir = xl_path()
         .ok_or_else(|| format!("could not determine xivlauncher config path"))?;
     let install_dir = dir
@@ -249,6 +271,8 @@ pub fn run() {
             dalamud_config_present,
             get_dalamud_config_json,
             write_dalamud_config_json,
+            get_plugin_config_json,
+            write_plugin_config_json,
             create_plugin,
             create_repo,
             install_plugin_from_url,
