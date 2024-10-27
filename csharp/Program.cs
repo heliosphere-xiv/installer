@@ -1,7 +1,5 @@
-using System.IO.Compression;
 using System.Reflection;
 using System.Runtime.InteropServices;
-using Dalamud.Plugin;
 using Newtonsoft.Json;
 
 namespace HeliosphereInstaller;
@@ -33,12 +31,20 @@ public class Installer {
     private object? Config { get; set; }
     private bool ConfigModified { get; set; }
 
-    public static readonly Installer Instance = new();
+    private static Installer Instance = null!;
 
     private static unsafe delegate*<char*, int, byte*> CopyToCString;
 
     [UnmanagedCallersOnly]
     public static unsafe void SetCopyToCStringFunctionPtr(delegate*<char*, int, byte*> copyToCString) => CopyToCString = copyToCString;
+
+    [UnmanagedCallersOnly]
+    public static unsafe void Initialise(byte* dalamudPathRaw, int dalamudPathLen) {
+        var dalamudPath = Marshal.PtrToStringUTF8((nint) dalamudPathRaw, dalamudPathLen);
+
+        var assembly = Assembly.LoadFrom(dalamudPath);
+        Installer.Instance = new Installer(assembly);
+    }
 
     [UnmanagedCallersOnly]
     public static unsafe byte* MakeRepo(byte* urlRaw, int urlLen) {
@@ -166,11 +172,9 @@ public class Installer {
         Formatting = Formatting.Indented,
     };
 
-    private Installer() {
+    private Installer(Assembly assembly) {
         this.Client = new HttpClient();
         this.DalamudFolder = Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "XIVLauncher");
-
-        var assembly = typeof(IDalamudPlugin).Assembly;
 
         var (localManifestType, localManifestProps) = GetTypeAndProperties(
             assembly,

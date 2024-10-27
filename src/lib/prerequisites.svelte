@@ -22,11 +22,13 @@
         prereqs = [
             ['Checking if FINAL FANTASY XIV is running', undefined],
             ['Checking if XIVLauncher is installed', undefined],
+            ['Checking if XIVLauncher has been opened', undefined],
         ];
 
         await Promise.allSettled([
             checkFfxiv(prereqs, 0),
-            checkXl(prereqs, 1),
+            checkXlInstalled(prereqs, 1),
+            checkXlOpened(prereqs, 2),
         ]);
 
         const allSatisfied = prereqs
@@ -36,7 +38,7 @@
     }
 
     async function checkFfxiv(reqs: typeof prereqs, idx: number) {
-        const running = await invoke('check_for_process', { name: 'ffxiv_dx11' }) as boolean;
+        const running = await invoke<boolean>('check_for_process', { name: 'ffxiv_dx11' });
         reqs[idx] = [
             running
                 ? 'FINAL FANTASY XIV must be closed for the installer to continue'
@@ -45,13 +47,23 @@
         ];
     }
 
-    async function checkXl(reqs: typeof prereqs, idx: number) {
-        const installed = await invoke('dalamud_config_present') as boolean;
+    async function checkXlInstalled(reqs: typeof prereqs, idx: number) {
+        const installed = await invoke<boolean>('initialise');
         reqs[idx] = [
             installed
                 ? 'XIVLauncher is installed'
-                : 'XIVLauncher must be installed and launched at least once',
+                : 'XIVLauncher must be installed before continuing',
             installed,
+        ];
+    }
+
+    async function checkXlOpened(reqs: typeof prereqs, idx: number) {
+        const opened = await invoke<boolean>('dalamud_config_present');
+        reqs[idx] = [
+            opened
+                ? 'XIVLauncher has been opened at least once'
+                : 'XIVLauncher must be launched at least once before continuing',
+            opened,
         ];
     }
 </script>

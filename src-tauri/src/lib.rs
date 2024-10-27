@@ -313,6 +313,44 @@ async fn check_path_validity(
     Ok(check_valid(path_str.as_ptr(), path_str.len() as i32) != 0)
 }
 
+#[tauri::command]
+async fn initialise(
+    state: State<'_, AppState>,
+) -> Result<bool, ()> {
+    let xl_path = match xl_path() {
+        Some(x) => x,
+        None => return Ok(false),
+    };
+
+    let assembly_path = xl_path
+        .join("addon")
+        .join("Hooks")
+        .join("dev")
+        .join("Dalamud.dll");
+
+    if !assembly_path.exists() {
+        return Ok(false);
+    }
+
+    let loader = state.delegate_loader.lock().await;
+    set_cstr_stuff(&*loader);
+    let initialise = loader
+        .get_function_with_unmanaged_callers_only::<fn(*const u8, i32)>(
+            pdcstr!("HeliosphereInstaller.Installer, heliosphere-installer"),
+            pdcstr!("Initialise"),
+        )
+        .unwrap();
+
+    let assembly_path_str = match assembly_path.to_str() {
+        Some(p) => p,
+        None => return Ok(false),
+    };
+
+    initialise(assembly_path_str.as_ptr(), assembly_path_str.len() as i32);
+
+    Ok(true)
+}
+
 struct AppState {
     delegate_loader: Mutex<AssemblyDelegateLoader>,
     http: Client,
@@ -346,6 +384,7 @@ pub fn run() {
             create_repo,
             install_plugin_from_url,
             check_path_validity,
+            initialise,
         ])
         .manage(AppState {
             delegate_loader: Mutex::new(delegate_loader),
