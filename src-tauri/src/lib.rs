@@ -299,7 +299,7 @@ async fn check_path_validity(
 
     set_cstr_stuff(&*loader);
     let check_valid = loader
-        .get_function_with_unmanaged_callers_only::<fn(*const u8, i32) -> bool>(
+        .get_function_with_unmanaged_callers_only::<fn(*const u8, i32) -> u8>(
             pdcstr!("HeliosphereInstaller.Installer, heliosphere-installer"),
             pdcstr!("IsPathValid"),
         )
@@ -310,7 +310,7 @@ async fn check_path_validity(
         None => return Ok(false),
     };
 
-    Ok(check_valid(path_str.as_ptr(), path_str.len() as i32))
+    Ok(check_valid(path_str.as_ptr(), path_str.len() as i32) != 0)
 }
 
 struct AppState {

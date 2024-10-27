@@ -118,20 +118,46 @@ public class Installer {
         }
     }
 
+    private static readonly Environment.SpecialFolder[] BadRoots = [
+        Environment.SpecialFolder.ProgramFiles,
+        Environment.SpecialFolder.ProgramFilesX86,
+        Environment.SpecialFolder.Programs,
+        Environment.SpecialFolder.CommonProgramFiles,
+        Environment.SpecialFolder.CommonProgramFilesX86,
+        Environment.SpecialFolder.CommonPrograms,
+        Environment.SpecialFolder.System,
+        Environment.SpecialFolder.SystemX86,
+    ];
+
+    private static string MakeEndWithSeparator(string input) {
+        return input.TrimEnd('/', '\\') + '/';
+    }
+
     [UnmanagedCallersOnly]
-    public static unsafe bool IsPathValid(byte* pathRaw, int pathLen) {
+    public static unsafe byte IsPathValid(byte* pathRaw, int pathLen) {
         var path = Marshal.PtrToStringUTF8((nint) pathRaw, pathLen);
+
+        foreach (var badRootKind in BadRoots) {
+            var badRoot = Environment.GetFolderPath(badRootKind);
+
+            var badUri = new Uri(MakeEndWithSeparator(badRoot));
+            var pathUri = new Uri(MakeEndWithSeparator(path));
+
+            if (badUri.IsBaseOf(pathUri)) {
+                return 0;
+            }
+        }
 
         try {
             var info = new DirectoryInfo(path);
             if ((info.Attributes & (FileAttributes.ReadOnly | FileAttributes.System)) != 0) {
-                return false;
+                return 0;
             }
         } catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException) {
-            return false;
+            return 0;
         }
 
-        return true;
+        return 1;
     }
 
     internal readonly static JsonSerializerSettings ConfigJsonSettings = new() {
