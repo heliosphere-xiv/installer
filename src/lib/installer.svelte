@@ -88,8 +88,10 @@
         const heliospherePlugin = repo.find(plugin => plugin['InternalName'] === HeliosphereInternalName);
         const penumbraPlugin = repo.find(plugin => plugin['InternalName'] === PenumbraInternalName);
 
-        configModified = configModified || await installPlugin(penumbraPlugin, config, already || SeaOfStarsRepo);
-        configModified = configModified || await installPlugin(heliospherePlugin, config, already || SeaOfStarsRepo);
+        let penumbraNew = await installPlugin(penumbraPlugin, config, already || SeaOfStarsRepo);
+        let heliosphereNew = await installPlugin(heliospherePlugin, config, already || SeaOfStarsRepo);
+
+        configModified = configModified || penumbraNew || heliosphereNew;
 
         if (configModified) {
             statuses.push('saving Dalamud configuration file');
