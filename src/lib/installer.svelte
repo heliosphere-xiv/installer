@@ -14,7 +14,7 @@
     const PenumbraInternalName = "Penumbra";
     const HeliosphereInternalName = "heliosphere-plugin";
 
-    let statuses: string[] = $state([]);
+    let statuses: [string, number | undefined, number | undefined][] = $state([]);
     let error: Nullable<string> = $state(undefined);
     let showPrompt: [boolean | string, any] = $state([false, undefined]);
     let configModified = false;
@@ -28,6 +28,10 @@
         start();
     });
 
+    function pushStatus(status: string, progress?: number, total?: number) {
+        statuses.push([status, progress, total]);
+    }
+
     async function start() {
         try {
             await startInner();
@@ -38,18 +42,18 @@
     }
 
     async function startInner() {
-        statuses.push('loading Dalamud configuration file');
+        pushStatus('loading Dalamud configuration file');
         const json = await invoke<Nullable<string>>('get_dalamud_config_json');
         if (json == null) {
             error = 'could not read dalamudConfig.json';
             return;
         }
 
-        statuses.push('parsing Dalamud configuration file');
+        pushStatus('parsing Dalamud configuration file');
         const config = JSON.parse(json);
 
 
-        statuses.push('checking for Sea of Stars repository');
+        pushStatus('checking for Sea of Stars repository');
         console.dir(config);
         const trl = config['ThirdRepoList']['$values'] as any[];
         let already: Nullable<string> = undefined;
@@ -66,7 +70,7 @@
         }
 
         if (already == null) {
-            statuses.push('adding Sea of Stars repository');
+            pushStatus('adding Sea of Stars repository');
 
             configModified = true;
             const repoJson = await invoke<Nullable<string>>('create_repo', {
@@ -82,7 +86,7 @@
 
         console.dir(config);
 
-        statuses.push('downloading plugin information from Sea of Stars');
+        pushStatus('downloading plugin information from Sea of Stars');
         const resp = await fetch(already || SeaOfStarsRepo);
         const repo = await resp.json() as any[];
         const heliospherePlugin = repo.find(plugin => plugin['InternalName'] === HeliosphereInternalName);
@@ -94,7 +98,7 @@
         configModified = configModified || penumbraNew || heliosphereNew;
 
         if (configModified) {
-            statuses.push('saving Dalamud configuration file');
+            pushStatus('saving Dalamud configuration file');
             const result = await invoke('write_dalamud_config_json', {
                 json: JSON.stringify(config, undefined, 4),
             });
@@ -105,7 +109,7 @@
             //}
         }
 
-        statuses.push('checking Penumbra mod directory');
+        pushStatus('checking Penumbra mod directory');
         let penumbraConfig: any = undefined;
         try {
             const json = await invoke<string>('get_plugin_config_json', {
@@ -131,7 +135,7 @@
         }
 
         if (showPrompt[0] !== false) {
-            statuses.push('prompting for new Penumbra directory');
+            pushStatus('prompting for new Penumbra directory');
         }
 
         canAdvance = !showPrompt[0];
@@ -140,7 +144,7 @@
     async function installPlugin(plugin: any, config: any, repoUrl: string): Promise<boolean> {
         const name = plugin['InternalName'];
 
-        statuses.push(`checking if ${name} is already installed`);
+        pushStatus(`checking if ${name} is already installed`);
         const profile = config['DefaultProfile'];
         if (profile == null) {
             throw new Error('default profile was null');
@@ -154,12 +158,12 @@
         for (const installed of plugins) {
             const installedName = installed['InternalName'];
             if (installedName === name) {
-                statuses.push(`${name} was already installed`);
+                pushStatus(`${name} was already installed`);
                 return false;
             }
         }
 
-        statuses.push(`installing ${name}`);
+        pushStatus(`installing ${name}`);
 
         const workingPluginId = await invoke<Nullable<string>>('install_plugin_from_url', {
             internalName: name,
@@ -209,7 +213,7 @@
     }
 
     async function finishSetup(path: string) {
-        statuses.push('updating Penumbra config');
+        pushStatus('updating Penumbra config');
 
         showPrompt[0] = false;
 
@@ -220,7 +224,7 @@
 
         config['ModDirectory'] = path;
 
-        statuses.push('saving Penumbra config');
+        pushStatus('saving Penumbra config');
 
         await invoke('write_plugin_config_json', {
             internalName: PenumbraInternalName,
@@ -228,6 +232,25 @@
         });
 
         canAdvance = true;
+    }
+
+    const numFormat = new Intl.NumberFormat();
+
+    function formatProgress(progress?: number, total?: number): string {
+        if (progress == null && total == null) {
+            return '';
+        }
+
+        let output = '(';
+        output += progress == null ? '?' : numFormat.format(progress);
+
+        if (total != null) {
+            output += `/${numFormat.format(total)}`;
+        }
+
+        output += ')';
+
+        return output;
     }
 </script>
 
@@ -274,10 +297,15 @@
             class='statuses'
             class:muted={error != null || showPrompt[0] !== false}
         >
-            <strong>{ statuses[statuses.length - 1] }</strong>
+            <strong aria-busy='true'>
+                {statuses[statuses.length - 1][0]}
+            </strong>
             <ul>
                 {#each [...statuses].reverse().slice(1) as status}
-                    <li>{status}</li>
+                    <li>
+                        {status[0]}
+                        {formatProgress(status[1], status[2])}
+                    </li>
                 {/each}
             </ul>
         </div>

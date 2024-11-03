@@ -339,6 +339,7 @@ public class RepoPlugin {
 
 public class Serde {
     private Type SettingsType { get; }
+    private PropertyInfo SettingsFormattingProperty { get; }
     private MethodInfo SerialiseMethod { get; }
     private MethodInfo DeserialiseMethod { get; }
     public object ConfigJsonSettings { get; }
@@ -348,6 +349,11 @@ public class Serde {
         var settings = newtonsoft.GetType("Newtonsoft.Json.JsonSerializerSettings");
         if (convert == null || settings == null) {
             throw new Exception("missing JsonConvert, JsonSerializerSettings, or Formatting");
+        }
+
+        var formattingProp = settings.GetProperty("Formatting");
+        if (formattingProp == null) {
+            throw new Exception("missing formatting property");
         }
 
         var serialiseParams = new Type[] {
@@ -380,13 +386,14 @@ public class Serde {
         this.ConfigJsonSettings = settingsField!.GetValue(null) ?? throw new Exception("json settings were null");
 
         this.SettingsType = settings;
+        this.SettingsFormattingProperty = formattingProp;
         this.SerialiseMethod = serialiseMethod;
         this.DeserialiseMethod = deserialiseMethod;
     }
 
     public string Serialise(object? obj, Type type, int formatting, object? settings = null) {
         settings ??= Activator.CreateInstance(this.SettingsType);
-        this.SettingsType.GetProperty("Formatting")!.SetValue(settings, formatting);
+        this.SettingsFormattingProperty.SetValue(settings, formatting);
 
         return this.Serialise(obj, type, settings);
     }
