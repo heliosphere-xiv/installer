@@ -68,7 +68,7 @@ jobs:
           # prerelease: false
           args: ${{ matrix.args }}
 
-      - uses: actions/create-release@v1
+      - uses: ncipollo/release-action@v1
         with:
           draft: true
           artifacts: src-tauri/target/release/heliosphere-installer.exe
