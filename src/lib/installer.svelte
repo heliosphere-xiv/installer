@@ -4,9 +4,11 @@
     import { invoke } from '@tauri-apps/api/core';
     import type { Nullable } from './nullable';
     import { open } from '@tauri-apps/plugin-dialog';
+    import stripBom from './stripBom';
 
     let {
         canAdvance = $bindable(),
+        canGoBack = $bindable(),
     }: BasicProps = $props();
 
     const SeaOfStarsRepo = "https://raw.githubusercontent.com/Ottermandias/SeaOfStars/main/repo.json";
@@ -20,13 +22,18 @@
     let configModified = false;
 
     onMount(() => {
+        restart();
+    });
+
+    function restart() {
+        canGoBack = false;
         canAdvance = false;
         showPrompt = [false, undefined];
         statuses = [];
         configModified = false;
         error = undefined;
         start();
-    });
+    }
 
     function pushStatus(status: string, progress?: number, total?: number) {
         statuses.push([status, progress, total]);
@@ -50,11 +57,10 @@
         }
 
         pushStatus('parsing Dalamud configuration file');
-        const config = JSON.parse(json);
+        const config = JSON.parse(stripBom(json));
 
 
         pushStatus('checking for Sea of Stars repository');
-        console.dir(config);
         const trl = config['ThirdRepoList']['$values'] as any[];
         let already: Nullable<string> = undefined;
         for (const repo of trl) {
@@ -81,10 +87,8 @@
                 throw new Error('failed to make repo');
             }
 
-            trl.push(JSON.parse(repoJson));
+            trl.push(JSON.parse(stripBom(repoJson)));
         }
-
-        console.dir(config);
 
         pushStatus('downloading plugin information from Sea of Stars');
         const resp = await fetch(already || SeaOfStarsRepo);
@@ -99,14 +103,9 @@
 
         if (configModified) {
             pushStatus('saving Dalamud configuration file');
-            const result = await invoke('write_dalamud_config_json', {
+            await invoke('write_dalamud_config_json', {
                 json: JSON.stringify(config, undefined, 4),
             });
-            console.log(result);
-            //if (!result) {
-            //    error = 'could not save Dalamud configuration file';
-            //    return;
-            //}
         }
 
         pushStatus('checking Penumbra mod directory');
@@ -116,9 +115,10 @@
                 internalName: penumbraPlugin['InternalName'],
             });
 
-            penumbraConfig = JSON.parse(json);
-        } catch {
+            penumbraConfig = JSON.parse(stripBom(json));
+        } catch (e) {
             // no-op
+            console.error(e);
         }
 
         const dir = penumbraConfig?.['ModDirectory'];
@@ -184,7 +184,7 @@
             throw new Error('could not create plugin');
         }
 
-        plugins.push(JSON.parse(pluginJson));
+        plugins.push(JSON.parse(stripBom(pluginJson)));
         return true;
     }
 
@@ -264,32 +264,49 @@
     </p>
 {:else}
     {#if error != null}
-        {error}
+        <div class='error'>
+            <div>
+                {error}
+            </div>
+
+            <button
+                class='fullwidth'
+                onclick={restart}
+            >
+                Retry
+            </button>
+        </div>
     {/if}
 
     {#if showPrompt[0] !== false}
-        <strong>
-            Where would you like your mods to be stored?
-        </strong>
+        <article class='prompt'>
+            <header>
+                <strong>
+                    Where would you like your mods to be stored?
+                </strong>
+            </header>
 
-        <p>
-            Pick a short location close to the root of a drive like
-            <code>C:\Penumbra</code> or <code>C:\FFXIVMods</code>.
-        </p>
+            <p>
+                Pick a short location close to the root of a drive like
+                <code>C:\Penumbra</code> or <code>D:\FFXIVMods</code>.
+            </p>
 
-        <button
-            onclick={choosePenumbraDir}
-        >
-            Pick folder
-        </button>
+            <footer>
+                {#if typeof showPrompt[0] === 'string'}
+                    <div class='error'>
+                        <small>
+                            {showPrompt[0]}
+                        </small>
+                    </div>
+                {/if}
 
-        {#if typeof showPrompt[0] === 'string'}
-            <div class='error'>
-                <small>
-                    {showPrompt[0]}
-                </small>
-            </div>
-        {/if}
+                <button
+                    onclick={choosePenumbraDir}
+                >
+                    Pick folder
+                </button>
+            </footer>
+        </article>
     {/if}
 
     {#if statuses.length > 0}
@@ -325,5 +342,13 @@
         border-radius: var(--pico-border-radius);
         background-color: #{color.mix($slate-900, $red-500, 95%)};
         color: #{color.mix($zinc-200, $red-500, 90%)};
+
+        &:not(:only-child) {
+            margin-bottom: var(--pico-spacing);
+        }
+
+        & > button {
+            margin-top: var(--pico-spacing);
+        }
     }
 </style>

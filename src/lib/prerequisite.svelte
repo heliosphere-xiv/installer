@@ -1,8 +1,9 @@
 <script lang='ts'>
+    import type { Snippet } from 'svelte';
     import Icon from './icon.svelte';
 
     interface Props {
-        label: string;
+        label: string | Snippet;
         state: boolean | undefined;
     }
 
@@ -36,7 +37,11 @@
                 />
             {/if}
         </span>
-        {label}
+        {#if typeof label === 'string'}
+            {label}
+        {:else}
+            {@render label()}
+        {/if}
     </div>
 </li>
 

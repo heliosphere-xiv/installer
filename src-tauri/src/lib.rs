@@ -204,21 +204,22 @@ async fn install_plugin_from_url(
     let loader = state.delegate_loader.lock().await;
 
     set_cstr_stuff(&*loader);
-    let fill_out = loader
-        .get_function_with_unmanaged_callers_only::<fn(
-            *const u8,
-            i32,
-            *const u8,
-            i32,
-            *const u8,
-            i32,
-            *mut *mut c_char,
-            *mut *mut c_char,
-        ) -> u8>(
-            pdcstr!("HeliosphereInstaller.Installer, heliosphere-installer"),
-            pdcstr!("FillOutManifest"),
-        )
-        .unwrap();
+    let fill_out =
+        loader
+            .get_function_with_unmanaged_callers_only::<fn(
+                *const u8,
+                i32,
+                *const u8,
+                i32,
+                *const u8,
+                i32,
+                *mut *mut c_char,
+                *mut *mut c_char,
+            ) -> u8>(
+                pdcstr!("HeliosphereInstaller.Installer, heliosphere-installer"),
+                pdcstr!("FillOutManifest"),
+            )
+            .unwrap();
 
     let (filled_out_json, version) = {
         let mut filled_out_json_ptr: *mut c_char = std::ptr::null_mut();
@@ -327,18 +328,13 @@ async fn check_path_validity(
 }
 
 #[tauri::command]
-async fn initialise(
-    state: State<'_, AppState>,
-) -> Result<bool, ()> {
+async fn initialise(state: State<'_, AppState>) -> Result<bool, ()> {
     let xl_path = match xl_path() {
         Some(x) => x,
         None => return Ok(false),
     };
 
-    let dev_path = xl_path
-        .join("addon")
-        .join("Hooks")
-        .join("dev");
+    let dev_path = xl_path.join("addon").join("Hooks").join("dev");
     let dalamud_path = dev_path.join("Dalamud.dll");
     let dalamud_common_path = dev_path.join("Dalamud.Common.dll");
     let newtonsoft_path = dev_path.join("Newtonsoft.Json.dll");
@@ -414,6 +410,7 @@ pub fn run() {
         .unwrap();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![

@@ -8,15 +8,17 @@
         canAdvance = $bindable(),
     }: BasicProps = $props();
 
-    // let runningPromise: Promise<void> | undefined = undefined;
     let prereqs: [string, boolean | undefined][] = $state([]);
 
     onMount(() => {
+        restart();
+    });
+
+    function restart() {
         prereqs = [];
         canAdvance = false;
-        // runningPromise = start();
         start();
-    });
+    }
 
     async function start() {
         prereqs = [
@@ -52,7 +54,7 @@
         reqs[idx] = [
             installed
                 ? 'XIVLauncher is installed'
-                : 'XIVLauncher must be installed before continuing',
+                : '<a href="https://goatcorp.github.io/">XIVLauncher</a> must be installed before continuing',
             installed,
         ];
     }
@@ -72,13 +74,24 @@
 
 <ul>
     {#each prereqs as [label, state]}
+        {#snippet labelSnippet()}
+            {@html label}
+        {/snippet}
+
         <Prerequisite
-            {label}
+            label={labelSnippet}
             {state}
         />
     {/each}
 </ul>
 
 {#if canAdvance}
-    <strong>You're all set, click next to begin the installation.</strong>
+    <strong>You're all set. Click next to begin the installation.</strong>
+{:else}
+    <button
+        class='fullwidth'
+        onclick={restart}
+    >
+        Check again
+    </button>
 {/if}

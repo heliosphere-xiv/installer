@@ -2,11 +2,18 @@
     import Installer from '$lib/installer.svelte';
     import Prerequisites from '$lib/prerequisites.svelte';
     import Splash from '$lib/splash.svelte';
+    import { exit } from '@tauri-apps/plugin-process';
 
     let step = $state(0);
     let canAdvance = $state(true);
+    let canGoBack = $state(true);
 
     function advanceStep() {
+        if (step === 2) {
+            exit(0);
+            return;
+        }
+
         step += 1;
     }
 </script>
@@ -25,6 +32,7 @@
         {:else if step === 2}
             <Installer
                 bind:canAdvance={canAdvance}
+                bind:canGoBack={canGoBack}
             />
         {/if}
     </div>
@@ -32,7 +40,7 @@
     {#if step !== 0}
         <div class='step-buttons'>
             <button
-                disabled={step === 0}
+                disabled={step === 0 || !canGoBack}
                 class='secondary'
                 onclick={() => step -= 1}
             >
@@ -42,7 +50,11 @@
                 disabled={!canAdvance}
                 onclick={advanceStep}
             >
-                Next
+                {#if step === 2}
+                    Close
+                {:else}
+                    Next
+                {/if}
             </button>
         </div>
     {/if}
