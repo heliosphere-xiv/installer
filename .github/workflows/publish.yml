@@ -61,9 +61,14 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: v__VERSION__ # the action automatically replaces \_\_VERSION\_\_ with the app version.
-          releaseName: 'Heliosphere Installer v__VERSION__'
-          releaseBody: 'See the assets to download this version and install.'
-          releaseDraft: true
-          prerelease: false
+          # tagName: v__VERSION__ # the action automatically replaces \_\_VERSION\_\_ with the app version.
+          # releaseName: 'Heliosphere Installer v__VERSION__'
+          # releaseBody: 'See the assets to download this version and install.'
+          # releaseDraft: true
+          # prerelease: false
           args: ${{ matrix.args }}
+
+      - uses: actions/create-release@v1
+        with:
+          draft: true
+          artifacts: src-tauri/target/release/heliosphere-installer.exe
