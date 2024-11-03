@@ -1,7 +1,26 @@
-# Tauri + SvelteKit + TypeScript
+# Heliosphere Installer
 
-This template should help get you started developing with Tauri, SvelteKit and TypeScript in Vite.
+This program will automatically install the [Sea of Stars repo][sos],
+[Penumbra plugin][penumbra], and [Heliosphere plugin][heliosphere] into your [XIVLauncher][xl]/Dalamud install.
 
-## Recommended IDE Setup
+In addition, it will also ask you where you want to keep your Penumbra mods installed.
 
-[VS Code](https://code.visualstudio.com/) + [Svelte](https://marketplace.visualstudio.com/items?itemName=svelte.svelte-vscode) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer).
+## Usage
+
+- Download the executable from the [latest release][latest] and run it.
+- Follow the steps until complete.
+- Launch the game through XIVLauncher.
+- Log in to a character.
+- Go through the Heliosphere first-time setup when prompted.
+- Done!
+
+## Troubleshooting
+
+If you run into any errors that you can't resolve, please let Anna know in our [Discord server][discord].
+
+[sos]: https://github.com/Ottermandias/SeaOfStars
+[penumbra]: https://github.com/xivdev/Penumbra
+[heliosphere]: https://github.com/heliosphere-xiv/plugin
+[xl]: https://github.com/goatcorp/FFXIVQuickLauncher
+[latest]: https://github.com/heliosphere-xiv/installer/releases/latest
+[discord]: https://discord.gg/3swpspafy2
