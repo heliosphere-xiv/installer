@@ -16,6 +16,9 @@ In addition, it will also ask you where you want to keep your Penumbra mods inst
 
 ## Troubleshooting
 
+Some Windows 10 devices may not have WebView2 installed. Please
+[download and install WebView2][webview2] if necessary.
+
 If you run into any errors that you can't resolve, please let Anna know in our [Discord server][discord].
 
 [sos]: https://github.com/Ottermandias/SeaOfStars
@@ -23,4 +26,5 @@ If you run into any errors that you can't resolve, please let Anna know in our [
 [heliosphere]: https://github.com/heliosphere-xiv/plugin
 [xl]: https://github.com/goatcorp/FFXIVQuickLauncher
 [latest]: https://github.com/heliosphere-xiv/installer/releases/latest
+[webview2]: https://go.microsoft.com/fwlink/p/?LinkId=2124703
 [discord]: https://discord.gg/3swpspafy2
