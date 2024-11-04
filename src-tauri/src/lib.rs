@@ -5,7 +5,7 @@ use std::{
     sync::Once,
 };
 
-use netcorehost::{hostfxr::AssemblyDelegateLoader, pdcstr};
+use netcorehost::{hostfxr::AssemblyDelegateLoader, pdcstr, pdcstring::PdCString};
 use reqwest::Client;
 use std::ffi::CString;
 use sysinfo::{ProcessRefreshKind, RefreshKind, System, UpdateKind};
@@ -395,18 +395,27 @@ struct AppState {
     http: Client,
 }
 
+const RUNTIMECONFIG_JSON: &str = include_str!("../../csharp/bin/Release/net8.0/heliosphere-installer.runtimeconfig.json");
+const DLL_BYTES: &[u8] = include_bytes!("../../csharp/bin/Release/net8.0/heliosphere-installer.dll");
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let runtimeconfig_path = tempdir.path().join("heliosphere-installer.runtimeconfig.json");
+    let dll_path = tempdir.path().join("heliosphere-installer.dll");
+
+    std::fs::write(&runtimeconfig_path, RUNTIMECONFIG_JSON).unwrap();
+    std::fs::write(&dll_path, DLL_BYTES).unwrap();
+
+    let runtimeconfig_path_pd = PdCString::try_from(runtimeconfig_path.to_str().unwrap()).unwrap();
+    let dll_path_pd = PdCString::try_from(dll_path.to_str().unwrap()).unwrap();
+
     let host = netcorehost::nethost::load_hostfxr().unwrap();
     let ctx = host
-        .initialize_for_runtime_config(pdcstr!(
-            "../csharp/bin/Release/net8.0/heliosphere-installer.runtimeconfig.json"
-        ))
+        .initialize_for_runtime_config(runtimeconfig_path_pd)
         .unwrap();
     let delegate_loader = ctx
-        .get_delegate_loader_for_assembly(pdcstr!(
-            "../csharp/bin/Release/net8.0/heliosphere-installer.dll"
-        ))
+        .get_delegate_loader_for_assembly(dll_path_pd)
         .unwrap();
 
     tauri::Builder::default()
