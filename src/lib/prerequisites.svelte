@@ -40,7 +40,7 @@
     }
 
     async function checkFfxiv(reqs: typeof prereqs, idx: number) {
-        const running = await invoke<boolean>('check_for_process', { name: 'ffxiv_dx11' });
+        const running = await invoke<boolean>('check_for_process', { name: 'ffxiv_dx11.exe' });
         reqs[idx] = [
             running
                 ? 'FINAL FANTASY XIV must be closed for the installer to continue'
